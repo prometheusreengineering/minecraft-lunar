@@ -7,16 +7,13 @@ The Prometheus' patch for Lunar Client.
 
 ## Compatibility
 
-| Loader | Versions     |
-|:-------|--------------|
-| Forge  | Coming Soon* |
-| Fabric | 1.16+        |
+| Loader | Versions |
+|:-------|----------|
+| Forge  | 1.8+     |
+| Fabric | 1.16+    |
 
 Download the mod [here](https://github.com/prometheusreengineering/minecraft-lunar/releases/latest), or use
 our [loader](https://github.com/prometheusreengineering/prometheus-minecraft/releases/latest) for auto-updates.
-
-\* Lunar Client itself does not support 1.8.9-1.12.2 Forge mods yet, despite having the UI for it. It was confirmed with
-their staff that it was coming, but with low priority due to huge player bases being dropped (ex: Hypixel).
 
 ## Features
 
@@ -26,7 +23,6 @@ their staff that it was coming, but with low priority due to huge player bases b
 
 ### Future Plans
 
-- Cosmetics, emotes, sprays and badges dump.
 - Restricted (ex: staff) modules.
 
 ## Disclaimer
