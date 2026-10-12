@@ -1,6 +1,8 @@
 package studio.dreamys.prometheus.util;
 
+import com.lunarclient.common.v1.Uuid;
 import com.lunarclient.websocket.cosmetic.v2.Outfit;
+import com.lunarclient.websocket.cosmetic.v2.OutfitTree;
 import com.lunarclient.websocket.emote.v1.EquippedEmote;
 import com.lunarclient.websocket.spray.v1.EquippedSpray;
 
@@ -13,7 +15,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.UUID;
 import java.util.logging.ConsoleHandler;
 import java.util.logging.Handler;
 import java.util.logging.Level;
@@ -30,7 +35,9 @@ public class FileUtils {
 
     private static final Path basePath = OS.getConfigFolder().resolve("lunar");
     private static final Path badgePath = basePath.resolve("badge.bin");
-    private static final Path outfitPath = basePath.resolve("outfit.bin");
+    private static final Path legacyOutfitPath = basePath.resolve("outfit.bin");
+    private static final Path outfitsPath = basePath.resolve("outfits.bin");
+    private static final Path outfitTreePath = basePath.resolve("outfit_tree.bin");
     private static final Path emotesPath = basePath.resolve("emotes.bin");
     private static final Path spraysPath = basePath.resolve("sprays.bin");
 
@@ -101,25 +108,117 @@ public class FileUtils {
         return badgeId;
     }
 
-    public static void writeOutfit(Outfit outfit) {
-        try (OutputStream os = Files.newOutputStream(outfitPath)) {
-            outfit.writeTo(os);
+    public static Uuid randomUuid() {
+        UUID uuid = UUID.randomUUID();
+        return Uuid.newBuilder()
+                .setHigh64(uuid.getMostSignificantBits())
+                .setLow64(uuid.getLeastSignificantBits())
+                .build();
+    }
+
+    public static void writeOutfits(List<Outfit> outfits) {
+        try (OutputStream os = Files.newOutputStream(outfitsPath)) {
+            for (Outfit outfit : outfits) {
+                outfit.writeDelimitedTo(os);
+            }
         } catch (Throwable e) {
-            logger.log(Level.SEVERE, "Failed to serialize outfit to file.", e);
+            logger.log(Level.SEVERE, "Failed to serialize outfit list to file.", e);
         }
     }
 
-    public static Outfit readOutfit() {
-        //create default outfit
-        Outfit.Builder builder = Outfit.newBuilder()
-                .setName("Prometheus")
-                .setFavorite(true);
+    public static List<Outfit> readOutfits() {
+        List<Outfit> outfits = new ArrayList<>();
 
-        try (InputStream is = Files.newInputStream(outfitPath)) {
-            Outfit outfit = Outfit.parseFrom(is);
-            builder.mergeFrom(outfit);
+        if (Files.exists(outfitsPath)) {
+            try (InputStream is = Files.newInputStream(outfitsPath)) {
+                while (is.available() > 0) {
+                    Outfit outfit = Outfit.parseDelimitedFrom(is);
+                    if (outfit != null) {
+                        outfits.add(outfit);
+                    }
+                }
+            } catch (Throwable e) {
+                logger.log(Level.WARNING, "Failed to deserialize outfit list from file.", e);
+            }
+        } else if (Files.exists(legacyOutfitPath)) {
+            //legacy saves only hold a single outfit
+            try (InputStream is = Files.newInputStream(legacyOutfitPath)) {
+                outfits.add(Outfit.newBuilder()
+                        .setName("Prometheus")
+                        .setFavorite(true)
+                        .mergeFrom(Outfit.parseFrom(is))
+                        .build());
+            } catch (Throwable e) {
+                logger.log(Level.WARNING, "Failed to deserialize legacy outfit from file.", e);
+            }
+        }
+
+        //lunar keys outfits by id, so every outfit needs a stable one
+        boolean changed = false;
+        for (int i = 0; i < outfits.size(); i++) {
+            if (!outfits.get(i).hasId()) {
+                outfits.set(i, outfits.get(i).toBuilder().setId(randomUuid()).build());
+                changed = true;
+            }
+        }
+
+        //create default outfit
+        if (outfits.isEmpty()) {
+            outfits.add(Outfit.newBuilder()
+                    .setId(randomUuid())
+                    .setName("Prometheus")
+                    .setFavorite(true)
+                    .build());
+            changed = true;
+        }
+
+        if (changed) {
+            writeOutfits(outfits);
+        }
+
+        return outfits;
+    }
+
+    public static void writeOutfitTree(OutfitTree outfitTree) {
+        try (OutputStream os = Files.newOutputStream(outfitTreePath)) {
+            outfitTree.writeTo(os);
         } catch (Throwable e) {
-            logger.log(Level.WARNING, "Failed to deserialize outfit from file.", e);
+            logger.log(Level.SEVERE, "Failed to serialize outfit tree to file.", e);
+        }
+    }
+
+    public static OutfitTree readOutfitTree(List<Outfit> outfits) {
+        OutfitTree outfitTree = OutfitTree.getDefaultInstance();
+
+        if (Files.exists(outfitTreePath)) {
+            try (InputStream is = Files.newInputStream(outfitTreePath)) {
+                outfitTree = OutfitTree.parseFrom(is);
+            } catch (Throwable e) {
+                logger.log(Level.WARNING, "Failed to deserialize outfit tree from file.", e);
+            }
+        }
+
+        return fixOutfitTree(outfitTree, outfits);
+    }
+
+    //drop references to outfits that no longer exist, and fall back to the first outfit as default
+    public static OutfitTree fixOutfitTree(OutfitTree outfitTree, List<Outfit> outfits) {
+        Set<Uuid> ids = new HashSet<>();
+        for (Outfit outfit : outfits) {
+            ids.add(outfit.getId());
+        }
+
+        OutfitTree.Builder builder = OutfitTree.newBuilder();
+        for (OutfitTree.ConditionalOutfit conditionalOutfit : outfitTree.getConditionalOutfitsList()) {
+            if (ids.contains(conditionalOutfit.getOutfitId())) {
+                builder.addConditionalOutfits(conditionalOutfit);
+            }
+        }
+
+        if (outfitTree.hasDefaultOutfitId() && ids.contains(outfitTree.getDefaultOutfitId())) {
+            builder.setDefaultOutfitId(outfitTree.getDefaultOutfitId());
+        } else if (!outfits.isEmpty()) {
+            builder.setDefaultOutfitId(outfits.get(0).getId());
         }
 
         return builder.build();
