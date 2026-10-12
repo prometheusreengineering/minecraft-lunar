@@ -22,11 +22,17 @@ import java.util.logging.Logger;
 public class FileUtils {
     public static final Logger logger = Logger.getLogger("Prometheus");
 
-    private static Path basePath = Paths.get("prometheus", "saved");
-    private static Path badgePath = basePath.resolve("badge.bin");
-    private static Path outfitPath = basePath.resolve("outfit.bin");
-    private static Path emotesPath = basePath.resolve("emotes.bin");
-    private static Path spraysPath = basePath.resolve("sprays.bin");
+    //lunar has no badge equipped when the id is -1
+    private static final int NO_BADGE = -1;
+
+    //old saves were relative to the working directory, which changes with how lunar is launched
+    private static final Path legacyPath = Paths.get("prometheus", "saved").toAbsolutePath();
+
+    private static final Path basePath = OS.getConfigFolder().resolve("lunar");
+    private static final Path badgePath = basePath.resolve("badge.bin");
+    private static final Path outfitPath = basePath.resolve("outfit.bin");
+    private static final Path emotesPath = basePath.resolve("emotes.bin");
+    private static final Path spraysPath = basePath.resolve("sprays.bin");
 
     static {
         //overwrite lunar's logger settings
@@ -42,6 +48,29 @@ public class FileUtils {
         } catch (IOException e) {
             logger.log(Level.SEVERE, "Failed to create base directory: " + basePath, e);
         }
+
+        migrateLegacyFiles();
+    }
+
+    private static void migrateLegacyFiles() {
+        if (!Files.isDirectory(legacyPath) || legacyPath.equals(basePath)) {
+            return;
+        }
+
+        //copy over anything we don't have yet, the legacy folder is left untouched
+        for (String name : new String[]{"badge.bin", "outfit.bin", "emotes.bin", "sprays.bin"}) {
+            Path source = legacyPath.resolve(name);
+            Path target = basePath.resolve(name);
+
+            if (Files.exists(source) && !Files.exists(target)) {
+                try {
+                    Files.copy(source, target);
+                    logger.log(Level.INFO, "Migrated " + source + " to " + target);
+                } catch (IOException e) {
+                    logger.log(Level.WARNING, "Failed to migrate " + source, e);
+                }
+            }
+        }
     }
 
     public static void writeBadge(int badgeId) {
@@ -53,13 +82,18 @@ public class FileUtils {
     }
 
     public static int readBadge() {
-        int badgeId = 0;
+        int badgeId = NO_BADGE;
 
         try {
             byte[] bytes = Files.readAllBytes(badgePath);
 
-            //legacy files hold a single unsigned byte
-            badgeId = bytes.length == 1 ? bytes[0] & 0xFF : ByteBuffer.wrap(bytes).getInt();
+            if (bytes.length == 1) {
+                //legacy files hold a single unsigned byte, where -1 was stored as 0xFF
+                int legacyId = bytes[0] & 0xFF;
+                badgeId = legacyId == 0xFF ? NO_BADGE : legacyId;
+            } else {
+                badgeId = ByteBuffer.wrap(bytes).getInt();
+            }
         } catch (Throwable e) {
             logger.log(Level.WARNING, "Failed to deserialize badge from file.", e);
         }
