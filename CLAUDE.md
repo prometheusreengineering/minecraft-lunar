@@ -5,9 +5,10 @@ Prometheus patch for Lunar Client: a set of Mixins that unlock every Lunar cosme
 ## Layout
 
 - `mixin/com/lunarclient/...` mirrors the package of the Lunar class each mixin targets. Mixin classes are named `Mixin<Target>`, with `$Stub` for a nested `Stub` class. Every mixin must be listed in `src/main/resources/prometheus.lunar.mixins.json` (`required: true`, `defaultRequire: 1`, so a missing target crashes on launch).
-- `util/FileUtils` holds our own state and the logger. Files are protobuf binaries under `prometheus/saved/`, relative to the game directory:
-  - `badge.bin`: the equipped badge ID as a 4-byte int. Older files are a single byte, and `readBadge` still accepts them.
-  - `outfit.bin`: the single outfit (`Outfit`), merged over a default named "Prometheus".
+- `util/FileUtils` holds our own state and the logger. Files are protobuf binaries under `OS.getConfigFolder()/lunar/`. That's `%APPDATA%/.minecraft/prometheus/lunar` on Windows, the same per-OS folders as essential on macOS/Linux, and it can be overridden with `PROMETHEUS_FOLDER`. Never use a path relative to the working directory, since Lunar's working directory changes with how it's launched. On startup, files from the old relative `prometheus/saved/` are copied over if missing.
+  - `badge.bin`: the equipped badge ID as a 4-byte int; `-1` means no badge. Older files are a single byte (where `0xFF` meant `-1`), and `readBadge` still accepts them.
+  - `outfits.bin`: length-delimited `Outfit` list. Every outfit gets a random `Uuid`, because Lunar keys outfits by id. A legacy single `outfit.bin` is read when `outfits.bin` doesn't exist yet.
+  - `outfit_tree.bin`: the `OutfitTree`, i.e. the default outfit plus conditional ones. `fixOutfitTree` drops references to deleted outfits.
   - `emotes.bin` / `sprays.bin`: length-delimited `EquippedEmote` / `EquippedSpray` lists.
 - There are no loader entrypoints. Forge loads the mixin config through `META-INF/MANIFEST.MF` (`MixinTweaker`), and Fabric through `fabric.mod.json`. Mod id is `prometheus-lunar` in every descriptor (`fabric.mod.json`, `mcmod.info`, `mods.toml`); keep them in sync.
 
@@ -15,7 +16,9 @@ Prometheus patch for Lunar Client: a set of Mixins that unlock every Lunar cosme
 
 - Lunar talks to its backend over a websocket RPC layer of generated protobuf services (`com.lunarclient.websocket.<feature>.v<N>.<Feature>Service.Stub`). We `@Overwrite` the stub methods, so **the request never reaches the server**. Instead we build the response ourselves and pass it to `rpcCallback.run(...)`, and Lunar handles it like a real server reply.
 - `login` responses set the `hasAll<X>Flag` (plus `artistTools` for cosmetics) and fill in the equipped state from `FileUtils`. Lunar unlocks everything from that flag; we never list individual cosmetic IDs.
-- Update/equip methods (`updateOutfit`, `equipBadge`, `updateEquipped*`) just persist the request to disk. Since the server never sees them, our files are the only source of truth across restarts.
+- Update/equip methods (`updateOutfit`, `equipBadge`, `updateEquipped*`) just persist the request to disk and never run the callback; Lunar passes empty callbacks for these. Since the server never sees them, our files are the only source of truth across restarts.
+- Outfit management (`createOutfit`, `deleteOutfit`, `selectOutfit`) is handled locally too and replies `STATUS_OK`. Lunar only applies these changes on an OK reply, and the real server doesn't know our outfits.
+- Any stub method we don't overwrite still goes to the real server. Before adding a feature, list a stub's methods (`javap -p`) to see which calls are still unpatched.
 - Use methods (`useEmote`, `useSpray`) reply `STATUS_OK` so Lunar plays them locally.
 - Only the cosmetic service has two versions in the jar (`cosmetic/v1` and `cosmetic/v2`). We patch `v2`. If Lunar bumps a service version, the new package needs its own mixin.
 
@@ -40,6 +43,6 @@ Extract only the packages you need into a scratch dir first; the jar holds ~1870
   ```
   javac -proc:none --release 8 -implicit:none -sourcepath "" -Xlint:-options -cp "lib/lunar.mock.jar;<m2>/org/spongepowered/mixin/0.8.7/mixin-0.8.7.jar" -d <out> $(find src/main/java -name "*.java")
   ```
-- No test suite. For `FileUtils` round-trips, a throwaway harness on the mock jar classpath can call the real protobuf message classes. Run it from a scratch dir, because `prometheus/saved` is relative to the working directory.
+- No test suite. For `FileUtils` round-trips, a throwaway harness on the mock jar classpath can call the real protobuf message classes. Set `PROMETHEUS_FOLDER` to a scratch dir so files don't land in the real save folder.
 - Code targets Java 8: no `var`, `List.of`, records, etc.
 - In-game testing is done by the user; report what was and wasn't verified.

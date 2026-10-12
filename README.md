@@ -19,7 +19,7 @@ our [loader](https://github.com/prometheusreengineering/prometheus-minecraft/rel
 
 - Unlocks ALL cosmetics, emotes, sprays and badges.
 - Lightweight and non-invasive.
-- Compatible with all Fabric versions of Lunar Client.
+- Compatible with all Fabric and Forge versions of Lunar Client.
 
 ### Future Plans
 
