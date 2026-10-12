@@ -19,6 +19,7 @@ import com.lunarclient.websocket.cosmetic.v2.UpdateOutfitResponse;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
 import studio.dreamys.prometheus.util.FileUtils;
+import studio.dreamys.prometheus.util.StaffMods;
 
 import java.util.List;
 import java.util.logging.Level;
@@ -30,6 +31,9 @@ public class MixinCosmeticService$Stub {
     @Overwrite
     public void login(RpcController rpcController, LoginRequest loginRequest, RpcCallback<LoginResponse> rpcCallback) {
         logger.log(Level.INFO, "Patched cosmetic service login request.");
+
+        //lunar is fully loaded by the time it logs in, so this is a safe place to look for its staff mods
+        StaffMods.unlock();
 
         //load saved outfits from file
         List<Outfit> outfits = FileUtils.readOutfits();

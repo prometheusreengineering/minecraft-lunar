@@ -21,10 +21,14 @@ Prometheus patch for Lunar Client: a set of Mixins that unlock every Lunar cosme
 - Any stub method we don't overwrite still goes to the real server. Before adding a feature, list a stub's methods (`javap -p`) to see which calls are still unpatched.
 - Use methods (`useEmote`, `useSpray`) reply `STATUS_OK` so Lunar plays them locally.
 - Only the cosmetic service has two versions in the jar (`cosmetic/v1` and `cosmetic/v2`). We patch `v2`. If Lunar bumps a service version, the new package needs its own mixin.
+- Staff mods (only Xray today) are the one thing with no unobfuscated hook. Lunar marks one available only when the server sends Apollo's `EnableStaffModsMessage`, and the Xray mod clears that flag on every disconnect. `util/StaffMods` (started from the cosmetic `login`) works around this without naming obfuscated classes:
+  - It scans Lunar's jar once for the staff-mod class: a small class containing the strings `Xray` and `getOrdinal`, with lombok's unobfuscated `getName()`/`getOrdinal()`, exactly one instance `()Z` getter and one `(Z)V` setter, and `public static final` fields of its own type.
+  - It then sets every such instance available again every second, on a daemon thread.
+  - If the structure no longer matches, it logs a warning and staff mods stay locked; it never crashes. Check it against a new build by running `StaffMods.unlock()` in a harness on the mock jar.
 
 ## Mixin rules
 
-- Target only the **unobfuscated** packages: `com.lunarclient.websocket` (protobuf stubs/messages) and `com.google.protobuf`. `com.moonsworth.lunar` is ProGuard-obfuscated (`HHICICROOC...`-style names), and those names change between Lunar builds.
+- Target only the **unobfuscated** packages: `com.lunarclient.websocket` (protobuf stubs/messages) and `com.google.protobuf`. `com.moonsworth.lunar` is ProGuard-obfuscated (`HHICICROOC...`-style names), and those names change between Lunar builds. When there is truly no unobfuscated hook, find the class by structure at runtime, as `StaffMods` does, instead of hardcoding obfuscated names.
 - Always use `remap = false`. The targets aren't Minecraft classes, so there are no mappings for them.
 - Before adding or changing a target, verify it exists in the current Lunar build. The jar is at `~/.lunarclient/offline/multiver/lunar.jar`; `lib/lunar.mock.jar` is a copy of it (check `lunarBuildData.txt` inside for the version). To inspect a class: `unzip` it, then `javap -p -c -cp <dir> <class> | grep <target>`.
 - Logging uses `java.util.logging` (`FileUtils.logger`). Lunar silences JUL, so `FileUtils` installs its own `ConsoleHandler`. Keep using that logger, not a new one.

@@ -18,12 +18,9 @@ our [loader](https://github.com/prometheusreengineering/prometheus-minecraft/rel
 ## Features
 
 - Unlocks ALL cosmetics, emotes, sprays and badges.
+- Unlocks restricted staff modules (ex: Xray) on every server.
 - Lightweight and non-invasive.
 - Compatible with all Fabric and Forge versions of Lunar Client.
-
-### Future Plans
-
-- Restricted (ex: staff) modules.
 
 ## Disclaimer
 
