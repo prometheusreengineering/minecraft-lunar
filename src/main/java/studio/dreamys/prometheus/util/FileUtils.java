@@ -4,9 +4,11 @@ import com.lunarclient.websocket.cosmetic.v2.Outfit;
 import com.lunarclient.websocket.emote.v1.EquippedEmote;
 import com.lunarclient.websocket.spray.v1.EquippedSpray;
 
+import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -43,8 +45,8 @@ public class FileUtils {
     }
 
     public static void writeBadge(int badgeId) {
-        try (OutputStream os = Files.newOutputStream(badgePath)) {
-            os.write(badgeId);
+        try (DataOutputStream os = new DataOutputStream(Files.newOutputStream(badgePath))) {
+            os.writeInt(badgeId);
         } catch (Throwable e) {
             logger.log(Level.SEVERE, "Failed to serialize badge to file.", e);
         }
@@ -53,8 +55,11 @@ public class FileUtils {
     public static int readBadge() {
         int badgeId = 0;
 
-        try (InputStream is = Files.newInputStream(badgePath)) {
-            badgeId = is.read();
+        try {
+            byte[] bytes = Files.readAllBytes(badgePath);
+
+            //legacy files hold a single unsigned byte
+            badgeId = bytes.length == 1 ? bytes[0] & 0xFF : ByteBuffer.wrap(bytes).getInt();
         } catch (Throwable e) {
             logger.log(Level.WARNING, "Failed to deserialize badge from file.", e);
         }
