@@ -60,7 +60,7 @@
         <dependency>
             <groupId>com.moonsworth</groupId>
             <artifactId>lunar</artifactId>
-            <version>2.21.23-2501</version>
+            <version>2.23.0-2640</version>
             <scope>system</scope>
             <systemPath>${project.basedir}/lib/lunar.mock.jar</systemPath>
         </dependency>
